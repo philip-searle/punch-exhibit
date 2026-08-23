@@ -1,0 +1,6 @@
+[submodule "ascsaver"]
+	path = ascsaver
+	url = https://gitlab.com/mezantrop/ascsaver.git
+[submodule "baudrate"]
+	path = baudrate
+	url = https://github.com/rricharz/baudrate.git
