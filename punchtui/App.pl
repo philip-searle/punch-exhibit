@@ -9,6 +9,7 @@ use Curses::UI;
 use Curses;
 use Device::SerialPort;
 use Try::Tiny;
+use CCH::PunchExhibit::CoinMech;
 use CCH::PunchExhibit::Fonts;
 
 my $port_name = '/dev/ttyUSB0';
@@ -20,6 +21,16 @@ my $cui = Curses::UI->new(
 	-color_support => 1,
 	-debug => 0
 );
+
+my $pi_init_status = pi_init(sub {
+	update_credits($credits + 1);
+});
+if (defined $pi_init_status) {
+	$cui->error(
+		-title => "Coin-mech init failed",
+		-message => $pi_init_status
+	);
+}
 
 my $status_window = $cui->add(
 	'status_window', 'Window',
@@ -39,20 +50,31 @@ my $kbprompt = $status_window->add(
 my $submenu = [
 	{ -label => 'Add credit', -value => sub {
 			update_credits($credits + 1);
-			open_menu();
 		}
 	},
 	{ -label => 'Toggle free play', -value => sub {
 			update_credits($credits < 0 ? 0 : -1);
-			open_menu();
 		}
 	},
 	{ -label => 'Leave service mode', -value => sub { } },
-	{ -label => 'Punch test tape', -value => sub {
+	{ -label => '', -value => sub{} },
+	{ -label => 'System information', -value => sub {
+			$cui->dialog(
+				-title => 'System Information',
+				-message => pi_info()
+			);
+		}
+	},
+	{ -label => 'Punch test tape (short)', -value => sub {
+			do_punch_internal(
+				'Hello, World!'
+			);
+		}
+	},
+	{ -label => 'Punch test tape (all chars)', -value => sub {
 			do_punch_internal(
 				'JACKDAWS LOVE MY BIG SPHINX OF QUARTZ 0123456789 ,.<>/?@#~[]!"$()'
 			);
-			open_menu();
 		}
 	},
 	{ -label => 'Exit program', -value => sub { exit; } }
@@ -85,11 +107,6 @@ my $coin_win = $cui->add(
 	-x => 0, -y => 2,
 	-width => 80, -height => 23
 );
-
-sub open_menu {
-	#$menubar->modalfocus;
-	#$menubar->pulldown;
-}
 
 sub close_menu {
 	$punch_win->focus();
