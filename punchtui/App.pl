@@ -8,8 +8,11 @@ use Modern::Perl;
 use Curses::UI;
 use Curses;
 use Device::SerialPort;
+use Try::Tiny;
 use CCH::PunchExhibit::Fonts;
 
+my $port_name = '/dev/ttyUSB0';
+my $baud_rate = 110;
 my $credits = 0;
 
 my $cui = Curses::UI->new(
@@ -123,40 +126,46 @@ sub do_punch {
 
 sub do_punch_internal {
 	my $text = shift;
-	my $bauds_per_char =
-		(1 + 5 + 1) * # max two bin chars, five 5x5 chars, one sep
-		(1 + 5 + 2);  # start bit, data bits, stop bits
-	my $total_bauds = $bauds_per_char * length($text);
 
-	$cui->progress(
-		-max => $total_bauds,
-		-message => 'Pull tape upwards when punching finishes'
-	);
-	$cui->setprogress(1);
+	try {
+		my $bauds_per_char =
+			(1 + 5 + 1) * # max two bin chars, five 5x5 chars, one sep
+			(1 + 5 + 2);  # start bit, data bits, stop bits
+		my $total_bauds = $bauds_per_char * length($text);
 
-	# Bodge becase Device::SerialPort sometimes doesn't set the config?
-	`stty -F /dev/ttyUSB0 110 -parenb cs5`;
-	$cui->setprogress(110);
+		$cui->progress(
+			-max => $total_bauds,
+			-message => 'Pull tape upwards when punching finishes'
+		);
+		$cui->setprogress(1);
 
-	my $start_time = time();
-	punch_souvenir($text);
-	my $end_time = time();
-	for (my $progress = ($end_time - $start_time) * 110; $progress < $total_bauds; $progress += 110) {
-		$cui->setprogress($progress);
+		# Bodge because Device::SerialPort sometimes doesn't set the config?
+		`stty -F $port_name $baud_rate -parenb cs5 2>&1 >/dev/null`;
+		$cui->setprogress($baud_rate);
+
+		my $start_time = time();
+		punch_souvenir($text);
+		my $end_time = time();
+		for (my $progress = ($end_time - $start_time) * $baud_rate; $progress < $total_bauds; $progress += $baud_rate) {
+			$cui->setprogress($progress);
+			sleep 1;
+		}
+		$cui->setprogress($total_bauds);
 		sleep 1;
+		$cui->dialog(-title => 'Punching complete!', -message => "Pull the tape upwards to tear it off.");
+	} catch {
+		$cui->error(-message => "Failed to punch; cause was:\n$_");
+	} finally {
+		$cui->noprogress;
+		$cui->draw();
 	}
-	$cui->setprogress($total_bauds);
-	sleep 1;
-	$cui->noprogress;
-	$cui->draw();
 }
 
 sub punch_souvenir {
 	my $text = shift;
 
-	my $port_name = '/dev/ttyUSB0';
 	my $port = Device::SerialPort->new($port_name) || die "Can't open $port_name: $!\n";
-	$port->baudrate(110);
+	$port->baudrate($baud_rate);
 	$port->parity('none');
 	$port->databits(5);
 	$port->stopbits(2);
